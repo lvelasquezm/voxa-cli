@@ -19,7 +19,7 @@ const DEFAULT_LEAST_UTTERANCES = 5;
 const UTTERANCES_VALID_CHARACTERS = /^[a-zA-Z0-9.üß€äö€ {}'_-]+$/;
 class dialogFlow {
   constructor(options) {
-  _.assign(this, options);
+    _.assign(this, options);
   }
 
   static get VALID_LOCALES() {
@@ -104,6 +104,7 @@ class dialogFlow {
         })
         .flattenDeep()
         .value();
+
         const eachUtterancePromise = fs.outputFile(path.join(customPathLocale, 'dialog-flow', invocation.environment, 'entities', `${key}_entries_en.json`), JSON.stringify(str, null, 2), { flag: 'w' });
         const entityDefinition = {
           name: key,
@@ -195,8 +196,6 @@ class dialogFlow {
 
       })
       .value();
-
-
     });
 
 
@@ -207,8 +206,6 @@ class dialogFlow {
       .map('environment')
       .uniq()
       .map(skillEnvironments => {
-
-
         const agent = {
           description: '',
           language: 'en',
@@ -287,12 +284,10 @@ class dialogFlow {
       .value();
     }
 
-
-
     return Promise.all(promises);
   }
 
-  buildSynonym(pathSynonym) {
+  buildSynonym(pathSynonym, extend) {
     const customPathSynonym = path.join(pathSynonym, this.locale);
     if (!this.locale) return new Error('Please define a locale. eg. this.locale = \'en-US\'');
     const promises = [];
@@ -301,6 +296,10 @@ class dialogFlow {
 
     _.map(this.slots, (value, key) => {
       if (_.values(value).find(syn => !_.isEmpty(syn))) {
+        // if the setting 'extendSynonyms' exists in interaction.json
+        // extend the slot values to include different capitalizations,
+        // spellings, and spacing variants
+        if (extend) value = extendSlots(value, this.variants);
         const str = JSON.stringify(value, null, 2);
         const promise = fs.outputFile(path.join(customPathSynonym, `${key}.json`), str, { flag: 'w' });
         promises.push(promise);
@@ -332,3 +331,54 @@ function appendUUIDToString(obj) {
   return obj;
 }
 module.exports = dialogFlow;
+
+function extendSlots(slots, variants) {
+  for (const slot in slots) {
+    const synonym = slots[slot];
+    const slotVariants = getVariants(slot, variants);
+
+    addVariants(slot, slots, synonym);
+    
+    if (slotVariants.length) {
+      _.forEach(slotVariants, (slot) => {
+        addVariants(slot, slots, synonym);
+      });
+    }
+  }
+
+  return slots;
+}
+
+function getVariants(value, variants) {
+  let newPhrase = [];
+  const normalized = value.toLowerCase();
+  _.forEach(variants, (variant) => {
+    if (normalized.indexOf(variant.joined) > -1) {
+      newPhrase.push(normalized.replace(variant.joined, variant.split));
+      if (variant.alt) {
+        newPhrase.push(normalized.replace(variant.joined, variant.alt));
+      }
+    }
+    if (normalized.indexOf(variant.split) > -1) {
+      newPhrase.push(normalized.replace(variant.split, variant.joined));
+       if (variant.alt) {
+        newPhrase.push(normalized.replace(variant.split, variant.alt));
+      }
+    }
+  });
+  return newPhrase;
+}
+
+function addVariants(slot, slots, synonym) {
+  const variants = [
+    slot,
+    _.lowerCase(slot),
+    _.startCase(slot)
+  ];
+
+  _.forEach(variants, (variant) => {
+    if (!(variant in slots)) {
+      slots[variant] = synonym;
+    }
+  });
+}

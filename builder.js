@@ -4,6 +4,7 @@ const _ = require('lodash');
 const Promise = require('bluebird');
 const processor = require('./src/csv-processor');
 const path = require('path');
+const fs = require('fs-extra');
 
 module.exports = function(options) {
   let invocationName = _.get(options, 'invocationName', []);
@@ -12,9 +13,13 @@ module.exports = function(options) {
   }
 
   const rootPath = _.get(options, 'rootPath');
-  const spreadsheets = _.get(options, 'spreadsheets' );
+  const spreadsheets = _.get(options, 'spreadsheets');
   const speechPath = _.get(options, 'speechPath', path.join(rootPath, 'speech-assets'));
   const synonymPath = _.get(options, 'synonymPath', path.join(rootPath, 'synonyms'));
+  const extendSynonyms = _.get(options, 'extendSynonyms', false);
+  const responsePath = _.get(options, 'responsePath', path.join(rootPath, 'responses'));
+  const pronunciationPath = _.get(options, 'pronunciationPath', path.join(rootPath, 'pronunciations'));
+  const slotMapPath = _.get(options, 'slotMapPath', path.join(rootPath, 'slotMap'));
   const auth = _.get(options, 'auth');
   const validate = _.get(options, 'validate', true);
   const build = _.get(options, 'build', true);
@@ -39,20 +44,20 @@ module.exports = function(options) {
   })
   .then(() => resultAlexa.map((schema) => {
     let placeHolderPromise = Promise.resolve();
-
-    if (validate && !_.isEmpty(schema.intents) && !_.isEmpty(schema.slots) && !_.isEmpty(schema.utterances)) {
-      schema.validate();
-    }
-    if (build) {
-      placeHolderPromise = schema.build(speechPath, localManifest);
+    if (synonymPath && !_.isEmpty(schema.intents) && !_.isEmpty(schema.slots) && !_.isEmpty(schema.utterances)) {
+      placeHolderPromise = schema.buildSynonym(synonymPath, extendSynonyms);
     }
 
     return placeHolderPromise;
   }))
   .then(() => resultAlexa.map((schema) => {
     let placeHolderPromise = Promise.resolve();
-    if (synonymPath && !_.isEmpty(schema.intents) && !_.isEmpty(schema.slots) && !_.isEmpty(schema.utterances)) {
-      placeHolderPromise = schema.buildSynonym(synonymPath);
+
+    if (validate && !_.isEmpty(schema.intents) && !_.isEmpty(schema.slots) && !_.isEmpty(schema.utterances)) {
+      schema.validate();
+    }
+    if (build) {
+      placeHolderPromise = schema.build(speechPath, localManifest, responsePath, pronunciationPath, slotMapPath);
     }
 
     return placeHolderPromise;
@@ -67,5 +72,4 @@ module.exports = function(options) {
   }))
   .then(() => console.log('script finished'))
   .then(() => resultAlexa);
-  ;
 };

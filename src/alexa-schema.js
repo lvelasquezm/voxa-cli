@@ -13,7 +13,7 @@ const DEFAULT_LEAST_UTTERANCES = 5;
 const UTTERANCES_VALID_CHARACTERS = /^[a-zA-Z0-9.üß€äö€ {}'_-]+$/;
 class alexaSchema {
   constructor(options) {
-  _.assign(this, options);
+    _.assign(this, options);
   }
 
   static get VALID_LOCALES() {
@@ -126,9 +126,10 @@ class alexaSchema {
     })
 
     _.map(uttr, (uttV, uttK) => {
-      uttV.map((u) => {
+      uttV.map((u, i) => {
         if (!UTTERANCES_VALID_CHARACTERS.test(u)) {
-          aError.add({ message: `Utterance ${uttK} ${u} has invalid characters`, type: AlexaError.ERROR_TYPE.UTTERANCE_HAS_INVALID_CHARACTERS })
+          this.utterances[uttK].splice(i, 1);
+          aError.add({ message: `Utterance ${uttK} ${u} has invalid characters and has been removed`, type: AlexaError.ERROR_TYPE.UTTERANCE_HAS_INVALID_CHARACTERS })
         }
       })
     });
@@ -246,12 +247,12 @@ class alexaSchema {
     aError.print();
   }
 
-  build(customPathLocale, localManifest) {
+  build(customPathLocale, localManifest, responsePath, pronunciationPath, slotMapPath) {
     if (!this.locale) return new Error('Please define a locale. eg. this.locale = \'en-US\'');
     // const customPathLocale = unique ? pathSpeech : path.join(pathSpeech);
     const promises = [];
 
-    //console.log('this', JSON.stringify(this, null, 2));
+    // console.log('this', JSON.stringify(this, null, 2));
     if (this.intents && this.utterances) {
       // console.log('this.invocations', this.invocations);
       this.invocations.map((invocation) => {
@@ -301,25 +302,43 @@ class alexaSchema {
             const name = key;
             return ({ values, name });
         })
-        .filter((item) => _.includes(slotsUsed, item.name) || _.includes(item.name, 'AMAZON.') )
+        .filter((item) => _.includes(slotsUsed, item.name) || _.includes(item.name, 'AMAZON.'))
         .value();
 
         const name = invocation.invocationname;
-        const interactionModel = { languageModel: { invocationName: name, intents, types }};
+        const interactionModel = { languageModel: { invocationName: name, intents, types } };
 
-        const promise = fs.outputFile(path.join(customPathLocale, 'alexa', this.locale,`${invocation.environment}-model.json`),  JSON.stringify({ interactionModel }, null, 2), { flag: 'w' });
+        const promise = fs.outputFile(path.join(customPathLocale, 'alexa', this.locale, `${invocation.environment}-model.json`),  JSON.stringify({ interactionModel }, null, 2), { flag: 'w' });
         promises.push(promise);
 
       });
     }
 
+    // build generated response file for alexa
+    if (!_.isEmpty(this.responses)) {
+      const promise = fs.outputFile(path.join(responsePath, 'alexa', this.locale, 'generated-responses.json'),  JSON.stringify(this.responses, null, 2), { flag: 'w' });
+      promises.push(promise);
+    }
+
+    // build special pronunciations file - no specific platform file structure right now, but could be added
+    if (!_.isEmpty(this.pronunciations)) {
+      const promise = fs.outputFile(path.join(pronunciationPath, 'pronunciations.json'),  JSON.stringify(this.pronunciations, null, 2), { flag: 'w' });
+      promises.push(promise);
+    }
+
+    // build slotMap if it exists
+    if (!_.isEmpty(this.slotMap)) {
+      const promise = fs.outputFile(path.join(slotMapPath, 'slotMap.json'),  JSON.stringify(this.slotMap, null, 2), { flag: 'w' });
+      promises.push(promise);
+    }
+
     if (this.manifest && this.skillEnvironmentsInformation) {
       if (localManifest) {
         const customEnvironment = 'local';
-        const customManifest = { };
+        const customManifest = {};
         _.map(localManifest, (value, key) => {
           customManifest[key] = value;
-          this.skillEnvironmentsInformation.push({ environment: customEnvironment,  key, value });
+          this.skillEnvironmentsInformation.push({ environment: customEnvironment, key, value });
         });
       }
 

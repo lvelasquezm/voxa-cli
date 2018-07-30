@@ -2,7 +2,7 @@
 
 const _ = require('lodash');
 const GoogleSpreadsheet = require('google-spreadsheet');
-//const creds = require('./client_secret.json');
+// const creds = require('./client_secret.json');
 const Promise = require('bluebird');
 const AlexaSchema = require('./alexa-schema');
 const DialogFlowSchema = require('./dialog-flow-schema');
@@ -18,6 +18,7 @@ const placeholders = {
   skillGeneral: 'SKILL_GENERAL_INFORMATION',
   skillLocaleSettings: 'SKILL_LOCALE_INFORMATION-',
   skillEnvironmentsInformation: 'SKILL_ENVIRONMENTS_INFORMATION',
+  chatbotSlotVariants: 'CHATBOT_SLOT_VARIANTS',
 };
 
 const processors = {
@@ -47,31 +48,31 @@ const processors = {
       if (_.includes(info.key, 'apis.custom.interfaces[]')) {
         const key = info.key.replace('apis.custom.interfaces[].type.', '');
         info.key = 'apis.custom.interfaces';
-        const previouseArr = _.get(manifest, info.key, []);
+        const previousArr = _.get(manifest, info.key, []);
 
-        if (info.value) previouseArr.push({ type: key});
+        if (info.value) previousArr.push({ type: key});
 
-        info.value = previouseArr;
+        info.value = previousArr;
       }
 
       if (_.includes(info.key, 'events.subscriptions[]')) {
         const key = info.key.replace('events.subscriptions[].eventName.', '');
         info.key = 'events.subscriptions';
-        const previouseArr = _.get(manifest, info.key, []);
+        const previousArr = _.get(manifest, info.key, []);
 
-        if (info.value) previouseArr.push({ eventName: key});
+        if (info.value) previousArr.push({ eventName: key});
 
-        info.value = previouseArr;
+        info.value = previousArr;
       }
 
       if (_.includes(info.key, 'permissions[]')) {
         const key = info.key.replace('permissions[].name.', '');
         info.key = 'permissions';
-        const previouseArr = _.get(manifest, info.key, []);
+        const previousArr = _.get(manifest, info.key, []);
 
-        if (info.value) previouseArr.push({ name: key});
+        if (info.value) previousArr.push({ name: key});
 
-        info.value = previouseArr;
+        info.value = previousArr;
       }
       _.set(manifest, info.key, info.value);
 
@@ -98,9 +99,9 @@ const processors = {
       if (_.includes(key, 'keywords')) info.value = info.value.split(',');
       if (_.includes(key, '[]')) {
         key = key.replace('[]', '');
-        const previouseArr = _.get(manifest, key, []);
-        previouseArr.push(info.value);
-        info.value = previouseArr;
+        const previousArr = _.get(manifest, key, []);
+        previousArr.push(info.value);
+        info.value = previousArr;
       }
 
       _.set(manifest, key, info.value);
@@ -146,12 +147,60 @@ const processors = {
       slotValues[key] = value;
     });
 
+    const responses = {};
+    const pronunciations = {};
+    const slotMap = {};
+    // get a key based on the synonym - if no synonym use the slot Name
+    // to categorize responses in response file.
+
+    _.each(rows).map((row) => {
+      const slotKey = row.synonym ? row.synonym.replace(/\./g, '') : slotName;
+      const category = row.category ? row.category.toUpperCase() : slotName.replace('LIST_OF_', '');
+      const keys = Object.keys(row).filter((key) => {
+        return key.indexOf('response-') === 0 && row[key];
+      });
+
+      // Build out responses if they exist in the spreadsheet
+      if (keys.length) {
+        const newResponse = {};
+        _.each(keys, (key) => {
+          const path = key.replace('response-', '');
+          if (/-alternate([0-9])+/g.test(path)) {
+            const mainPath = path.replace(/-alternate([0-9])+/g, '');
+            const previousValue = newResponse[mainPath];
+            if (!_.isArray(previousValue)) {
+              newResponse[mainPath] = [previousValue];
+            }
+            newResponse[mainPath].push(row[key]);
+          } else {
+            _.set(newResponse, path, row[key]);
+          }
+        });
+        _.set(responses, `${category}.${slotKey}`, newResponse);
+      }
+
+      // build out special pronunciations if they exist
+      if (row.pronunciation) {
+        _.set(pronunciations, slotKey, row.pronunciation);
+      }
+      // build out category map for use within the skill to know the
+      // slot category if the slot has to include multiple categories
+      // to work in the interaction model correctly.
+      if (row.category) {
+        _.set(slotMap, `${slotName}.${slotKey}`, row.category);
+      }
+    });
+
     const slots = {};
     slots[slotName] = slotValues;
 
     // console.log(JSON.stringify({ slots }, null, 2));
-
-    return { slots };
+    const result = {};
+    result.slots = slots;
+    result.responses = responses;
+    result.pronunciations = pronunciations;
+    result.slotMap = slotMap;
+    return result;
   }),
   intents: worksheet => getRows(worksheet).then((rows) => {
     let previousIntent;
@@ -238,6 +287,18 @@ const processors = {
     // console.log(JSON.stringify({ utterances }, null, 2));
 
     return { utterances };
+  }),
+  chatbotSlotVariants: worksheet => getRows(worksheet).then((rows) => {
+    const variants = {};
+    _.each(rows, (row) => {
+      variants[row.joined] = {
+        joined: row.joined,
+        split: row.split,
+        alt: row.alternatespelling
+      };
+    });
+
+    return { variants };
   }),
   other: worksheet => getRows(worksheet).then((rows) => {
     const firstRow = _.head(rows);
