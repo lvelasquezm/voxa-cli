@@ -162,18 +162,23 @@ const processors = {
 
       // Build out responses if they exist in the spreadsheet
       if (keys.length) {
-        const newResponse = {};
+        const newResponse = _.get(responses, `${category}.${slotKey}`, {});
         _.each(keys, (key) => {
-          const path = key.replace('response-', '');
+          let path = key.replace('response-', '');
+          const matches = row[key].match(/\[(.*?)\]/);
+          if (matches) path = `${path}.${matches[1]}`;
+          const response = matches ? row[key].replace(/\[(.*?)\]/, '') : row[key];
+
           if (/-alternate([0-9])+/g.test(path)) {
-            const mainPath = path.replace(/-alternate([0-9])+/g, '');
-            const previousValue = newResponse[mainPath];
-            if (!_.isArray(previousValue)) {
-              newResponse[mainPath] = [previousValue];
+            path = path.replace(/-alternate([0-9])+/g, '');
+            const previousResponse = newResponse[path];
+            if (!_.isArray(previousResponse)) {
+              _.set(newResponse, path, [previousResponse]);
             }
-            newResponse[mainPath].push(row[key]);
+            const array = _.get(newResponse, path);
+            array.push(response);
           } else {
-            _.set(newResponse, path, row[key]);
+            _.set(newResponse, path, response);
           }
         });
         _.set(responses, `${category}.${slotKey}`, newResponse);
