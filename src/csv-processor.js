@@ -165,6 +165,9 @@ const processors = {
         const newResponse = _.get(responses, `${category}.${slotKey}`, {});
         _.each(keys, (key) => {
           let path = key.replace('response-', '');
+          if (path.indexOf('note-') > -1) {
+            path = path.substr(0, path.indexOf('note-'));
+          }
           const matches = row[key].match(/\[(.*?)\]/);
           if (matches) path = `${path}.${matches[1]}`;
           const response = matches ? row[key].replace(/\[(.*?)\]/, '') : row[key];
