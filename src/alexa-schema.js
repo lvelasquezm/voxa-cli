@@ -129,7 +129,7 @@ class alexaSchema {
       uttV.map((u, i) => {
         if (!UTTERANCES_VALID_CHARACTERS.test(u)) {
           this.utterances[uttK].splice(i, 1);
-          aError.add({ message: `Utterance ${uttK} ${u} has invalid characters and has been removed`, type: AlexaError.ERROR_TYPE.UTTERANCE_HAS_INVALID_CHARACTERS })
+          aError.add({ message: `Utterance ${uttK} ${u} has invalid characters and has been removed from the Alexa model`, type: AlexaError.ERROR_TYPE.UTTERANCE_HAS_INVALID_CHARACTERS })
         }
       })
     });
