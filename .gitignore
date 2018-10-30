@@ -17,6 +17,8 @@ _site/
 .jekyll-cache/
 .jekyll-metadata
 
+lib/
+.vscode/
 ### macOS ###
 # General
 .DS_Store
